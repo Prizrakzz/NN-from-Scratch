@@ -90,3 +90,51 @@ attention_weights = torch.softmax(scaled_scores, dim=-1)
 attention_output = attention_weights @ V
 
 print(attention_output)
+
+
+def attention_head(X, W_Q, W_K, W_V):
+    Q = X @ W_Q
+    K = X @ W_K
+    V = X @ W_V
+
+    scores = Q @ K.T
+    scaled_scores = scores / math.sqrt(Q.shape[-1])
+
+    attention_weights = torch.softmax(scaled_scores, dim=-1)
+    output = attention_weights @ V
+
+    return output, attention_weights
+
+torch.manual_seed(0)
+
+d_model = 4
+num_heads = 2
+head_dim = 2
+
+# Head 1 parameters
+W_Q1 = torch.randn(d_model, head_dim)
+W_K1 = torch.randn(d_model, head_dim)
+W_V1 = torch.randn(d_model, head_dim)
+
+# Head 2 parameters
+W_Q2 = torch.randn(d_model, head_dim)
+W_K2 = torch.randn(d_model, head_dim)
+W_V2 = torch.randn(d_model, head_dim)
+
+print("W_Q1 shape:", W_Q1.shape)
+print("W_Q2 shape:", W_Q2.shape)
+
+head1_output, head1_weights = attention_head(x, W_Q1, W_K1, W_V1)
+head2_output, head2_weights = attention_head(x, W_Q2, W_K2, W_V2)
+
+print("Head 1 output shape:", head1_output.shape)
+print("Head 2 output shape:", head2_output.shape)
+
+print("\nHead 1 attention weights:")
+print(head1_weights)
+
+print("\nHead 2 attention weights:")
+print(head2_weights)
+
+multi_head_output = torch.cat([head1_output, head2_output], dim=-1)
+print("Multi-head output:", multi_head_output)
