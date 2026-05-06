@@ -1,7 +1,17 @@
 import math as m
-import torch 
+import time
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data import TensorDataset, DataLoader
+
+# Phase 2: CPU thread control (OS-level parallelism)
+torch.set_num_threads(4)
+torch.set_num_interop_threads(2)
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f"Using device: {device}")
+print(f"CPU threads: {torch.get_num_threads()}")
 
 sentences = [
     "a person who thinks about the future",
@@ -47,11 +57,15 @@ for ids in encoded_sentences:
     inputs.append(x)
     targets.append(y)
 
-X_train = torch.tensor(inputs)
-Y_train = torch.tensor(targets)
+X_train = torch.tensor(inputs).to(device)
+Y_train = torch.tensor(targets).to(device)
 
 print("X_train shape:", X_train.shape)
 print("Y_train shape:", Y_train.shape)
+
+# Phase 3: DataLoader with multiprocessing
+dataset = TensorDataset(X_train, Y_train)
+dataloader = DataLoader(dataset, batch_size=8, shuffle=True, num_workers=0)
 
 
 class TransformerLM(nn.Module):
@@ -86,6 +100,9 @@ class TransformerLM(nn.Module):
         self.ln_final = nn.LayerNorm(d_module)
         self.lm_head = nn.Linear(d_module, vocab_size, bias=False)
 
+        # Phase 1: cache causal mask once instead of rebuilding every forward pass
+        self.register_buffer('mask', torch.tril(torch.ones(max_seq_length, max_seq_length)))
+
     def forward(self, token_ids):
         batch_size, seq_length = token_ids.shape
 
@@ -108,7 +125,7 @@ class TransformerLM(nn.Module):
 
         scores = Q @ K.transpose(-2, -1) / m.sqrt(self.head_dim)
 
-        mask = torch.tril(torch.ones(seq_length, seq_length, device=token_ids.device))
+        mask = self.mask[:seq_length, :seq_length]
         scores = scores.masked_fill(mask == 0, float("-inf"))
 
         attention_weights = torch.softmax(scores, dim=-1)
@@ -135,24 +152,31 @@ class TransformerLM(nn.Module):
         
 torch.manual_seed(0)
 
-model = TransformerLM(vocab_size=vocab_size)
+model = TransformerLM(vocab_size=vocab_size).to(device)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
 
+t_start = time.time()
+
 for step in range(300):
-    logits = model(X_train)
+    # Phase 3: iterate over DataLoader batches
+    for X_batch, Y_batch in dataloader:
+        logits = model(X_batch)
 
-    logits_flat = logits.view(-1, vocab_size)
-    targets_flat = Y_train.view(-1)
+        logits_flat = logits.view(-1, vocab_size)
+        targets_flat = Y_batch.view(-1)
 
-    loss = F.cross_entropy(logits_flat, targets_flat)
+        loss = F.cross_entropy(logits_flat, targets_flat)
 
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
+        # Phase 1: set_to_none=True saves a memory write vs zeroing
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
 
     if step % 50 == 0:
         print(f"step {step}, loss = {loss.item():.4f}")
+
+print(f"Training time: {time.time() - t_start:.2f}s")
 
 def generate(model, start_text, max_new_tokens=5):
     model.eval()
