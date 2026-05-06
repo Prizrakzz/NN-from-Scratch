@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-
+import math
 sentences = [
     "i like cats",
     "i like dogs",
@@ -46,7 +46,7 @@ embedding_table = torch.randn(vocab_size, embedding_dim)
 
 
 embeddings = embedding_table[x]
-print(embeddings)
+
 
 max_seq_length = 3
 
@@ -56,10 +56,37 @@ position_ids = torch.arange(max_seq_length)
 
 position_embeddings = position_embedding_table[position_ids]
 
-print(position_embeddings)
+
 
 residual_stream = embeddings + position_embeddings
-print(residual_stream)
 
 
+x = torch.tensor([
+    [1.0, 0.0, 1.0, 0.0],
+    [0.0, 1.0, 1.0, 0.0],
+    [0.0, 1.0, 0.0, 1.0]
+])
 
+torch.manual_seed(0)
+
+d_model = 4
+d_k = 2
+d_v = 2
+
+W_Q = torch.randn(d_model, d_k)
+W_K = torch.randn(d_model, d_k)
+W_V = torch.randn(d_model, d_v)
+
+Q = x @ W_Q
+K = x @ W_K
+V = x @ W_V
+
+scores = Q @ K.T
+
+scaled_scores = scores / math.sqrt(d_k)
+
+attention_weights = torch.softmax(scaled_scores, dim=-1)
+
+attention_output = attention_weights @ V
+
+print(attention_output)
