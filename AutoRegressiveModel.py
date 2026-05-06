@@ -21,6 +21,37 @@ for sentence in tokenized:
 
 vocab = sorted(set(all_tokens))
 
+#lookup tables
 token_to_id ={token:idx for idx,token in enumerate(vocab)}
 id_to_token = {idx:token for idx,token in enumerate(vocab)}
+
+
+encoded_sentences = []
+for sentence in tokenized:
+    ids = [token_to_id[token] for token in sentence]
+    encoded_sentences.append(ids)
+
+print(encoded_sentences)
+
+inputs = []
+targets = []
+
+for ids in encoded_sentences:
+    x = ids[:-1]
+    y = ids[1:]
+
+    inputs.append(x)
+    targets.append(y)
+
+X_train = torch.tensor(inputs)
+Y_train = torch.tensor(targets)
+
+print("X_train:")
+print(X_train)
+
+print("\nY_train:")
+print(Y_train)
+
+print("\nX_train shape:", X_train.shape)
+print("Y_train shape:", Y_train.shape)
 
